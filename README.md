@@ -23,3 +23,7 @@
 - Start simple
 - Build layer by layer
 - Focus on gameplay first, graphics and polish and optimization come later
+
+## Credits:
+
+- [Originally forked from dgreenheck's isometric-rpg](https://github.com/dgreenheck/isometric-rpg)
