@@ -1,28 +1,39 @@
-import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { createMusicPlayer } from './gui/musicPlayer.js';
 import { createConfigEditor } from './gui/configEditor.js';
+import { createInventory } from './gui/inventory.js';
+import { createMinimap } from './gui/minimap.js';
+import { createChatBox } from './gui/chatBox.js';
 
 const createGUI = (gameConfig, updateGame) => {
-  const gui = new GUI();
-  
-  // Set GUI to be on top and prevent click-through
-  gui.domElement.style.zIndex = '1001';
-  gui.domElement.style.position = 'absolute';
-  gui.domElement.style.top = '0';
-  gui.domElement.style.right = '0';
+  const guiContainer = document.createElement('div');
+  guiContainer.id = 'game-gui';
+  guiContainer.style.position = 'absolute';
+  guiContainer.style.top = '0';
+  guiContainer.style.right = '0';
+  guiContainer.style.bottom = '0';
+  guiContainer.style.width = '200px'; // Adjust as needed
+  guiContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+  guiContainer.style.color = 'white';
+  guiContainer.style.fontFamily = 'Arial, sans-serif';
+  guiContainer.style.fontSize = '12px';
+  guiContainer.style.zIndex = '1001';
 
-  // Add event listener to stop propagation of mouse events
-  gui.domElement.addEventListener('mousedown', (event) => {
-    event.stopPropagation();
-  });
+  // Create and append GUI components
+  const minimap = createMinimap();
+  const inventory = createInventory();
+  const chatBox = createChatBox();
 
-  // Create the config editor
-  createConfigEditor(gui, gameConfig, updateGame);
+  guiContainer.appendChild(minimap);
+  guiContainer.appendChild(inventory);
+  document.body.appendChild(chatBox);
+  document.body.appendChild(guiContainer);
 
-  // Create the music player
+  // Create the config editor (you may want to hide this in the final version)
+  createConfigEditor(gameConfig, updateGame);
+  // Create the music player (you may want to integrate this differently)
   createMusicPlayer();
 
-  return gui;
+  return guiContainer;
 };
 
 export { createGUI };

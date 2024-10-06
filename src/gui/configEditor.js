@@ -1,6 +1,8 @@
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
-const createConfigEditor = (gui, gameConfig, updateGame) => {
+const createConfigEditor = (gameConfig, updateGame) => {
+    const gui = new GUI({ closed: true });
+
     const addFolder = (name, params, path = '') => {
       const folder = gui.addFolder(name);
       Object.entries(params).forEach(([key, value]) => {
@@ -13,10 +15,12 @@ const createConfigEditor = (gui, gameConfig, updateGame) => {
           });
         }
       });
+      return folder; // Return the created folder
     };
   
     // Lights and Sky controls
     const environmentFolder = gui.addFolder('Environment');
+    environmentFolder.close(); // Close the Environment folder by default
     
     // Sky and Sun controls
     const skyFolder = environmentFolder.addFolder('Sky & Sun');
@@ -41,7 +45,10 @@ const createConfigEditor = (gui, gameConfig, updateGame) => {
     });
   
     // addFolder('World', gameConfig.world, 'world'); doesn't work properly because of the heightmap
-    addFolder('NPCs', gameConfig.npcs, 'npcs');
-  };
-  
-  export { createConfigEditor };
+    const npcsFolder = addFolder('NPCs', gameConfig.npcs, 'npcs');
+    npcsFolder.close(); // Close the NPCs folder by default
+
+    return gui;
+};
+
+export { createConfigEditor };
