@@ -8,4 +8,4 @@ cmds = ["bun i"]
 cmds = ["bun run build"]
 
 [start]
-cmd = "bun run prod"
+cmd = "bun run serve"
