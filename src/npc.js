@@ -1,11 +1,19 @@
-import * as THREE from 'three';
 import { Vector3 } from 'three';
 import { createCharacter } from './character';
+import { createCharacterModel } from './character/characterModel';
 
 const createNPC = (initialPosition, world) => {
+  // Generate random color
+  const randomColor = Math.random() * 0xFFFFFF;
+  
+  // Generate random size (0.8 to 1.2 times the original size)
+  const sizeMultiplier = 0.8 + Math.random() * 0.4;
+
+  const { geometry, material } = createCharacterModel(randomColor, sizeMultiplier);
+
   const npcOptions = {
-    geometry: new THREE.CapsuleGeometry(0.2, 0.4),
-    material: new THREE.MeshStandardMaterial({ color: 0xc04040 }),
+    geometry,
+    material,
     moveSpeed: 2,
     usePathfinding: true
   };

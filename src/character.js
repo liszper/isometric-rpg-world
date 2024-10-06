@@ -1,34 +1,61 @@
 import * as THREE from 'three';
-import { Vector2, Vector3 } from 'three';
+import { Vector2, Vector3, Quaternion } from 'three';
 import { search } from './pathfinding';
+import { createCharacterModel } from './character/characterModel';
+
+const getTerrainHeight = (heightMap, x, z) => {
+  const gridX = Math.floor(x);
+  const gridZ = Math.floor(z);
+  return heightMap && heightMap[gridZ] ? heightMap[gridZ][gridX] || 0 : 0;
+};
+
+const smoothedTerrainHeight = (heightMap, x, z) => {
+  const x0 = Math.floor(x);
+  const z0 = Math.floor(z);
+  const x1 = x0 + 1;
+  const z1 = z0 + 1;
+
+  const dx = x - x0;
+  const dz = z - z0;
+
+  const h00 = getTerrainHeight(heightMap, x0, z0);
+  const h10 = getTerrainHeight(heightMap, x1, z0);
+  const h01 = getTerrainHeight(heightMap, x0, z1);
+  const h11 = getTerrainHeight(heightMap, x1, z1);
+
+  const h0 = h00 * (1 - dx) + h10 * dx;
+  const h1 = h01 * (1 - dx) + h11 * dx;
+
+  return h0 * (1 - dz) + h1 * dz;
+};
 
 const createCharacter = (initialPosition, world, options = {}) => {
   const {
-    geometry = new THREE.CapsuleGeometry(0.25, 0.5),
-    material = new THREE.MeshStandardMaterial({ color: 0x4040c0 }),
     moveSpeed = 2,
+    // Removed rotationSpeed
     getTargetPosition = null,
-    usePathfinding = false
+    usePathfinding = false,
+    ...modelOptions
   } = options;
 
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.copy(initialPosition);
+  const characterModel = createCharacterModel(modelOptions);
+
+  // Adjust initial position to be on top of the terrain
+  initialPosition.y = smoothedTerrainHeight(world.heightMap, initialPosition.x, initialPosition.z) + 0.5;
+  characterModel.position.copy(initialPosition);
 
   let state = {
-    currentPosition: new Vector3().copy(mesh.position),
-    targetPosition: new Vector3().copy(mesh.position),
+    currentPosition: new Vector3().copy(characterModel.position),
+    targetPosition: new Vector3().copy(characterModel.position),
+    // Removed direction and targetDirection
     finalTargetPosition: null,
     isMoving: false,
     moveSpeed,
+    // Removed rotationSpeed
     world,
     path: [],
-    pathIndex: 0
-  };
-
-  const getTerrainHeight = (x, z) => {
-    const gridX = Math.floor(x);
-    const gridZ = Math.floor(z);
-    return world.heightMap && world.heightMap[gridZ] ? world.heightMap[gridZ][gridX] || 0 : 0;
+    pathIndex: 0,
+    currentDirection: new Vector3(0, 0, 1) // Add this line to track current direction
   };
 
   const setTargetPosition = (currentState, newTargetPosition) => {
@@ -48,9 +75,9 @@ const createCharacter = (initialPosition, world, options = {}) => {
       newState.pathIndex = 0;
       newState.isMoving = true;
       const nextPoint = newState.path[0];
-      newState.targetPosition = new Vector3(
+      newState.targetPosition.set(
         nextPoint.x + 0.5,
-        getTerrainHeight(nextPoint.x + 0.5, nextPoint.y + 0.5) + 0.5,
+        smoothedTerrainHeight(world.heightMap, nextPoint.x + 0.5, nextPoint.y + 0.5) + 0.5,
         nextPoint.y + 0.5
       );
     } else {
@@ -72,21 +99,27 @@ const createCharacter = (initialPosition, world, options = {}) => {
     const newState = { ...currentState };
 
     if (newState.isMoving) {
-      const direction = new Vector3().subVectors(newState.targetPosition, newState.currentPosition).normalize();
-      const step = direction.multiplyScalar(newState.moveSpeed * deltaTime);
-      const newPosition = new Vector3().addVectors(newState.currentPosition, step);
+      const moveDirection = new THREE.Vector3().subVectors(newState.targetPosition, newState.currentPosition).normalize();
+      const step = moveDirection.multiplyScalar(newState.moveSpeed * deltaTime);
+      const newPosition = new THREE.Vector3().addVectors(newState.currentPosition, step);
 
-      // Get the new terrain height at the new position
-      const targetHeight = getTerrainHeight(newPosition.x, newPosition.z) + 0.5;
-      const heightDifference = targetHeight - newPosition.y;
-      const smoothingFactor = 5; // Adjust this value to control smoothness
-      newPosition.y += heightDifference * Math.min(smoothingFactor * deltaTime, 1);
+      // Always set the Y position to be on top of the terrain
+      newPosition.y = smoothedTerrainHeight(world.heightMap, newPosition.x, newPosition.z) + 0.5;
+
+      // Update the current direction
+      if (step.length() > 0.001) { // Only update direction if there's significant movement
+        newState.currentDirection.copy(moveDirection);
+      }
+
+      // Rotate the character model to face the movement direction
+      const lookAtPoint = new Vector3().addVectors(characterModel.position, newState.currentDirection);
+      characterModel.lookAt(lookAtPoint);
 
       // Check if we've reached or overshot the target
       if (newPosition.distanceTo(newState.targetPosition) <= step.length()) {
         newState.currentPosition.copy(newState.targetPosition);
-        newState.currentPosition.y = getTerrainHeight(newState.targetPosition.x, newState.targetPosition.z) + 0.5;
-        mesh.position.copy(newState.currentPosition);
+        newState.currentPosition.y = smoothedTerrainHeight(world.heightMap, newState.targetPosition.x, newState.targetPosition.z) + 0.5;
+        characterModel.position.copy(newState.currentPosition);
 
         if (newState.pathIndex < newState.path.length - 1) {
           // Move to the next tile in the path
@@ -94,7 +127,7 @@ const createCharacter = (initialPosition, world, options = {}) => {
           const nextPoint = newState.path[newState.pathIndex];
           newState.targetPosition.set(
             nextPoint.x + 0.5,
-            getTerrainHeight(nextPoint.x + 0.5, nextPoint.y + 0.5) + 0.5,
+            smoothedTerrainHeight(world.heightMap, nextPoint.x + 0.5, nextPoint.y + 0.5) + 0.5,
             nextPoint.y + 0.5
           );
         } else {
@@ -105,7 +138,7 @@ const createCharacter = (initialPosition, world, options = {}) => {
         }
       } else {
         newState.currentPosition.copy(newPosition);
-        mesh.position.copy(newPosition);
+        characterModel.position.copy(newPosition);
       }
     }
 
@@ -113,17 +146,19 @@ const createCharacter = (initialPosition, world, options = {}) => {
   };
 
   return {
-    mesh,
+    mesh: characterModel,
     update: (deltaTime) => {
       state = update(deltaTime, state);
     },
-    getPosition: () => mesh.position.clone(),
+    getPosition: () => characterModel.position.clone(),
+    // Removed getDirection
     setTargetPosition: (newTargetPosition) => {
       state = setTargetPosition(state, newTargetPosition);
     },
     isMoving: () => state.isMoving,
-    getPath: () => state.path
+    getPath: () => state.path,
+    getCurrentPathIndex: () => state.pathIndex
   };
 };
 
-export { createCharacter };
+export { createCharacter, smoothedTerrainHeight };

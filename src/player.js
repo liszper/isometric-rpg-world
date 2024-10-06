@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Vector3 } from 'three';
 import { createCharacter } from './character';
+import { createPathVisualization } from './character/pathVisualization';
 
 const createPlayer = (camera, world, playerConfig = {}) => {
   
@@ -23,29 +24,12 @@ const createPlayer = (camera, world, playerConfig = {}) => {
   const mouseCoords = new THREE.Vector2();
   const targetPosition = new Vector3();
 
-  // Memoize path node creation
-  const pathNodeCache = new Map();
-  const getPathNode = (coords) => {
-    const key = `${coords.x},${coords.y}`;
-    if (!pathNodeCache.has(key)) {
-      const node = new THREE.Mesh(
-        new THREE.SphereGeometry(0.1),
-        new THREE.MeshBasicMaterial({ color: 0xffff00 })
-      );
-      const terrainHeight = world.heightMap[Math.floor(coords.y)][Math.floor(coords.x)];
-      node.position.set(coords.x + 0.5, terrainHeight + 0.1, coords.y + 0.5);
-      pathNodeCache.set(key, node);
-    }
-    return pathNodeCache.get(key);
-  };
+  const pathVisualization = createPathVisualization(world);
 
-  const visualizePath = (path, world) => {
-    world.path.clear();
-    if (path && path.length > 0) {
-      path.forEach((coords) => {
-        world.path.add(getPathNode(coords));
-      });
-    }
+  const update = (deltaTime) => {
+    player.update(deltaTime);
+    pathVisualization.updatePathNodes(player);
+    updateCamera(player.getPosition());
   };
 
   const onMouseDown = (event) => {
@@ -60,7 +44,7 @@ const createPlayer = (camera, world, playerConfig = {}) => {
     if (intersections.length > 0) {
       targetPosition.set(intersections[0].point.x, 0.5, intersections[0].point.z);
       player.setTargetPosition(targetPosition);
-      visualizePath(player.getPath(), world);
+      pathVisualization.visualizePath(player.getPath());
     }
   };
 
@@ -75,16 +59,12 @@ const createPlayer = (camera, world, playerConfig = {}) => {
 
   return {
     ...player,
-    update: (deltaTime) => {
-      player.update(deltaTime);
-      updateCamera(player.getPosition());
-    },
+    update,
     mesh: player.mesh,
     getPosition: () => player.getPosition(),
     setPosition: (newPosition) => {
-      mesh.position.copy(newPosition);
-      state.currentPosition.copy(newPosition);
-      state.targetPosition.copy(newPosition);
+      player.mesh.position.copy(newPosition);
+      player.setTargetPosition(newPosition);
     }
   };
 };

@@ -1,584 +1,379 @@
-import { Howl } from 'howler';
+import { createDrumSound } from './sounds/drumSound.js';
+import { createSynthSound } from './sounds/synthSound.js';
+import { SOUNDTRACK_CONFIG } from './sounds/tracks/advanced.js';
+import { createVisualization, updateVisualization } from './sounds/visualization.js';
 
-// Define the available waveforms
-const WAVEFORMS = {
-  SQUARE: 'square',
-  SAWTOOTH: 'sawtooth',
-  TRIANGLE: 'triangle',
-  SINE: 'sine'
+const NOTES = {
+  C2: 65.41, "C#2": 69.30, D2: 73.42, "D#2": 77.78, E2: 82.41, F2: 87.31, "F#2": 92.50, G2: 98.00, "G#2": 103.83, A2: 110.00, "A#2": 116.54, B2: 123.47,
+  C3: 130.81, "C#3": 138.59, D3: 146.83, "D#3": 155.56, E3: 164.81, F3: 174.61, "F#3": 185.00, G3: 196.00, "G#3": 207.65, A3: 220.00, "A#3": 233.08, B3: 246.94,
+  C4: 261.63, "C#4": 277.18, D4: 293.66, "D#4": 311.13, E4: 329.63, F4: 349.23, "F#4": 369.99, G4: 392.00, "G#4": 415.30, A4: 440.00, "A#4": 466.16, B4: 493.88,
+  C5: 523.25, "C#5": 554.37, D5: 587.33, "D#5": 622.25, E5: 659.25, F5: 698.46, "F#5": 739.99, G5: 783.99, "G#5": 830.61, A5: 880.00, "A#5": 932.33, B5: 987.77
 };
 
-// Define the available effects
-const EFFECTS = {
-  NONE: 'none',
-  VIBRATO: 'vibrato',
-  TREMOLO: 'tremolo',
-  ARPEGGIO: 'arpeggio',
-  CHORUS: 'chorus',
-  DISTORTION: 'distortion',
-  DELAY: 'delay'
-};
+const WAVEFORMS = ['square', 'sawtooth', 'triangle', 'sine'];
 
-// Define the available instruments with more detailed configurations
-const INSTRUMENTS = {
-  LEAD: {
-    name: 'lead',
-    waveform: 'custom',
-    harmonics: [1, 0.5, 0.3, 0.2], // Adds overtones for a richer sound
-    detune: 5, // Slight detune for a fatter sound
-    envelope: { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.2 },
-    filter: { type: 'lowpass', frequency: 2000, Q: 1 },
-    defaultEffect: EFFECTS.VIBRATO,
-    defaultEffectParams: { frequency: 5, depth: 10 }
-  },
-  BASS: {
-    name: 'bass',
-    waveform: 'custom',
-    harmonics: [1, 0.3, 0.1], // Fewer harmonics for a cleaner bass sound
-    detune: 0,
-    envelope: { attack: 0.05, decay: 0.2, sustain: 0.8, release: 0.4 },
-    filter: { type: 'lowpass', frequency: 500, Q: 2 },
-    defaultEffect: EFFECTS.NONE
-  },
-  PAD: {
-    name: 'pad',
-    waveform: 'custom',
-    harmonics: [1, 0.7, 0.5, 0.3, 0.2], // More harmonics for a rich, atmospheric sound
-    detune: 10, // More detune for a wider stereo image
-    envelope: { attack: 0.5, decay: 1, sustain: 0.8, release: 1.5 },
-    filter: { type: 'lowpass', frequency: 1000, Q: 0.5 },
-    defaultEffect: EFFECTS.CHORUS,
-    defaultEffectParams: { rate: 1.5, depth: 0.7, delay: 0.01 }
-  },
-  DRUM: {
-    name: 'drum',
-    waveform: 'custom',
-    harmonics: [1, 0.8, 0.6, 0.4, 0.2], // Complex harmonics for a more realistic drum sound
-    detune: 0,
-    envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 },
-    filter: { type: 'bandpass', frequency: 200, Q: 5 },
-    defaultEffect: EFFECTS.DISTORTION,
-    defaultEffectParams: { amount: 0.2 }
-  },
-  PLUCK: {
-    name: 'pluck',
-    waveform: 'custom',
-    harmonics: [1, 0.6, 0.3, 0.15], // Harmonics to simulate a plucked string
-    detune: 3,
-    envelope: { attack: 0.001, decay: 0.1, sustain: 0.3, release: 0.2 },
-    filter: { type: 'lowpass', frequency: 3000, Q: 5 },
-    defaultEffect: EFFECTS.DELAY,
-    defaultEffectParams: { time: 0.2, feedback: 0.3, mix: 0.2 }
+let sharedAudioContext = null;
+let activeSounds = [];
+let loopTimeoutId = null;
+let isPlaying = false;
+let pausedTime = 0;
+let startTime = 0;
+let currentPatterns = null;
+let currentLoops = -1;
+let pauseStartTime = 0;
+let totalPausedTime = 0;
+let visualizationElements = [];
+let audioContextErrorCount = 0;
+const MAX_AUDIO_CONTEXT_ERRORS = 5;
+
+// Add this helper function at the beginning of the file
+function isValidNumber(value) {
+  return typeof value === 'number' && isFinite(value) && !isNaN(value);
+}
+
+export function getAudioContext() {
+  if (!sharedAudioContext || sharedAudioContext.state === 'closed') {
+    try {
+      sharedAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+      sharedAudioContext.addEventListener('statechange', handleAudioContextStateChange);
+    } catch (error) {
+      console.error('Failed to create AudioContext:', error);
+      return null;
+    }
   }
-};
+  return sharedAudioContext;
+}
 
-// Define musical scales
-const SCALES = {
-  C_MAJOR: [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88],
-  G_MAJOR: [392.00, 440.00, 493.88, 523.25, 587.33, 659.25, 739.99],
-};
-
-// Define chord progressions
-const CHORD_PROGRESSIONS = {
-  I_V_vi_IV: [0, 4, 5, 3],
-  ii_V_I: [1, 4, 0],
-};
-
-// Create an audio context
-let audioContext;
-let currentOscillators = [];
-let currentGainNodes = [];
-
-const initAudioContext = () => {
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-};
-
-// Function to create an oscillator
-const createOscillator = (instrument, frequency) => {
-  const oscillator = audioContext.createOscillator();
-  
-  if (instrument.waveform === 'custom') {
-    oscillator.setPeriodicWave(createCustomWave(audioContext, instrument.harmonics));
-  } else {
-    oscillator.type = instrument.waveform;
+function handleAudioContextStateChange(event) {
+  console.log('AudioContext state changed:', event.target.state);
+  if (event.target.state === 'interrupted' || event.target.state === 'suspended') {
+    event.target.resume().catch(error => console.warn('Failed to resume AudioContext:', error));
   }
-  
-  if (Number.isFinite(frequency)) {
-    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-    oscillator.detune.setValueAtTime(instrument.detune, audioContext.currentTime);
-  } else {
-    console.warn(`Invalid frequency value: ${frequency}. Using default 440Hz.`);
-    oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-  }
-  
-  // Apply filter
-  const filter = audioContext.createBiquadFilter();
-  filter.type = instrument.filter.type;
-  filter.frequency.setValueAtTime(instrument.filter.frequency, audioContext.currentTime);
-  filter.Q.setValueAtTime(instrument.filter.Q, audioContext.currentTime);
-  
-  oscillator.connect(filter);
-  
-  return { oscillator, filter };
-};
+}
 
-// Function to create a gain node
-const createGainNode = () => {
-  return audioContext.createGain();
-};
-
-// Function to apply effects
-const applyEffect = (audioNode, effect, params) => {
-  const createVibrato = (frequency, depth) => {
-    const vibrato = audioContext.createOscillator();
-    vibrato.type = 'sine';
-    vibrato.frequency.setValueAtTime(frequency, audioContext.currentTime);
-    const vibratoGain = audioContext.createGain();
-    vibratoGain.gain.setValueAtTime(depth, audioContext.currentTime);
-    vibrato.connect(vibratoGain);
-    return { vibrato, vibratoGain };
-  };
-
-  const createTremolo = (frequency, depth) => {
-    const tremolo = audioContext.createOscillator();
-    tremolo.type = 'sine';
-    tremolo.frequency.setValueAtTime(frequency, audioContext.currentTime);
-    const tremoloGain = audioContext.createGain();
-    tremoloGain.gain.setValueAtTime(1 - depth / 2, audioContext.currentTime);
-    tremolo.connect(tremoloGain.gain);
-    return { tremolo, tremoloGain };
-  };
-
-  // New Chorus effect
-  const createChorus = (rate, depth, delay) => {
-    const chorus = audioContext.createDelay();
-    const lfo = audioContext.createOscillator();
-    const lfoGain = audioContext.createGain();
-
-    lfo.frequency.value = rate;
-    lfoGain.gain.value = depth;
-
-    lfo.connect(lfoGain);
-    lfoGain.connect(chorus.delayTime);
-    
-    chorus.delayTime.value = delay;
-    
-    lfo.start();
-    
-    return chorus;
-  };
-
-  // New Distortion effect
-  const createDistortion = (amount) => {
-    const distortion = audioContext.createWaveShaper();
-    distortion.curve = makeDistortionCurve(amount);
-    return distortion;
-  };
-
-  // New Delay effect
-  const createDelay = (time, feedback, mix) => {
-    const delay = audioContext.createDelay();
-    const feedbackGain = audioContext.createGain();
-    const dryGain = audioContext.createGain();
-    const wetGain = audioContext.createGain();
-
-    delay.delayTime.value = time;
-    feedbackGain.gain.value = feedback;
-    dryGain.gain.value = 1 - mix;
-    wetGain.gain.value = mix;
-
-    delay.connect(feedbackGain);
-    feedbackGain.connect(delay);
-
-    return { delay, dryGain, wetGain };
-  };
-
-  const effects = {
-    [EFFECTS.VIBRATO]: () => {
-      const { vibrato, vibratoGain } = createVibrato(
-        params.frequency || 5,
-        params.depth || 10
-      );
-      const vibratoNode = audioContext.createGain();
-      audioNode.connect(vibratoNode);
-      vibratoGain.connect(vibratoNode.gain);
-      vibrato.start();
-      return vibratoNode;
-    },
-    [EFFECTS.TREMOLO]: () => {
-      const { tremolo, tremoloGain } = createTremolo(
-        params.frequency || 5,
-        params.depth || 0.5
-      );
-      audioNode.connect(tremoloGain);
-      tremolo.start();
-      return tremoloGain;
-    },
-    [EFFECTS.ARPEGGIO]: () => {
-      // Implement arpeggio effect
-      return audioNode;
-    },
-    [EFFECTS.CHORUS]: () => createChorus(params.rate, params.depth, params.delay),
-    [EFFECTS.DISTORTION]: () => createDistortion(params.amount),
-    [EFFECTS.DELAY]: () => {
-      const { delay, dryGain, wetGain } = createDelay(params.time, params.feedback, params.mix);
-      audioNode.connect(dryGain);
-      audioNode.connect(delay);
-      delay.connect(wetGain);
-      return audioContext.createGain(); // Return a dummy node for consistency
-    },
-    [EFFECTS.NONE]: () => audioNode
-  };
-
-  const applySelectedEffect = effects[effect] || effects[EFFECTS.NONE];
-  return applySelectedEffect();
-};
-
-// Helper function for distortion effect
-const makeDistortionCurve = (amount) => {
-  const k = typeof amount === 'number' ? amount : 50;
-  const n_samples = 44100;
-  const curve = new Float32Array(n_samples);
-  const deg = Math.PI / 180;
-
-  for (let i = 0; i < n_samples; ++i) {
-    const x = (i * 2) / n_samples - 1;
-    curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+function createTone(frequency, duration, waveform = 'square', fadeOutDuration = 0.4) {
+  const audioContext = getAudioContext();
+  if (!audioContext) {
+    console.error('AudioContext is not available');
+    return null;
   }
 
-  return curve;
-};
+  if (!isValidNumber(frequency) || !isValidNumber(duration)) {
+    console.warn(`Invalid frequency (${frequency}) or duration (${duration}). Skipping this note.`);
+    return null;
+  }
 
-// New function to create a custom periodic wave
-const createCustomWave = (audioContext, harmonics) => {
-  const real = new Float32Array(harmonics.length);
-  const imag = new Float32Array(harmonics.length);
-  harmonics.forEach((harmonic, i) => {
-    real[i] = 0;
-    imag[i] = harmonic;
+  if (waveform === 'drum') {
+    return createDrumSound(frequency, duration);
+  }
+
+  const sound = createSynthSound(frequency, duration, waveform, fadeOutDuration);
+  
+  if (sound) {
+    const now = audioContext.currentTime;
+    activeSounds.push({ tone: sound, stopTime: now + duration });
+  }
+  
+  return sound;
+}
+
+// Updated definePattern function
+function definePattern(notes, durations, instrument) {
+  return notes.map((note, index) => {
+    if (note === null) {
+      return { duration: durations[index], isRest: true };
+    }
+    const frequency = NOTES[note];
+    if (!isFinite(frequency)) {
+      console.warn(`Invalid or missing note: ${note}. Skipping this note.`);
+      return null;
+    }
+    return {
+      frequency: frequency,
+      duration: durations[index],
+      ...instrument
+    };
+  }).filter(note => note !== null);
+}
+
+// Updated playPattern function with visualization
+function playPattern(pattern, loops = 1) {
+  const audioContext = getAudioContext();
+  if (!audioContext) {
+    console.error('AudioContext is not available');
+    return 0;
+  }
+
+  const now = audioContext.currentTime;
+  let time = 0;
+  const patternDuration = pattern.reduce((sum, note) => sum + (note ? note.duration : 0), 0);
+
+  for (let loop = 0; loop < loops; loop++) {
+    pattern.forEach(note => {
+      if (note.isRest) {
+        // If it's a rest, just wait for the duration
+        time += note.duration;
+      } else if (note && isFinite(note.frequency)) {
+        const tone = createTone(note.frequency, note.duration, note.waveform);
+        if (tone) {
+          const gainNode = audioContext.createGain();
+          gainNode.gain.setValueAtTime(note.volume, now + time);
+          tone.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          tone.start(now + time);
+          tone.stop(now + time + note.duration);
+          
+          // Update visualization for the note
+          updateVisualization(visualizationElements[visualizationElements.length - 1], now + time, note.duration);
+        }
+        time += note.duration;
+      } else {
+        console.warn(`Skipping invalid note in pattern:`, note);
+      }
+    });
+  }
+
+  return patternDuration * loops;
+}
+
+// Updated playPolyphonic function with visualization
+function playPolyphonic(patterns, loops = 1) {
+  if (!patterns || !Array.isArray(patterns) || patterns.length === 0) {
+    console.error('Invalid patterns provided to playPolyphonic');
+    return 0;
+  }
+
+  const audioContext = getAudioContext();
+  if (!audioContext) {
+    console.error('AudioContext is not available');
+    return 0;
+  }
+
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().catch(error => console.warn('Failed to resume AudioContext:', error));
+  }
+
+  const now = audioContext.currentTime;
+  let maxDuration = 0;
+
+  patterns.forEach(pattern => {
+    let time = 0;
+    const patternDuration = calculatePatternDuration(pattern);
+
+    for (let loop = 0; loop < loops; loop++) {
+      pattern.forEach(note => {
+        if (note.isRest) {
+          time += note.duration;
+        } else if (note && isValidNumber(note.frequency) && isValidNumber(note.duration) && isValidNumber(note.volume)) {
+          const tone = createTone(note.frequency, note.duration, note.waveform, note.fadeOutDuration);
+          if (tone) {
+            try {
+              const gainNode = audioContext.createGain();
+              gainNode.gain.setValueAtTime(note.volume, now + time);
+              tone.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              tone.start(now + time);
+              tone.stop(now + time + note.duration);
+              
+              // Create and update visualization for each note
+              const visualElement = createVisualization(note.frequency, note.duration, note.waveform);
+              updateVisualization(visualElement, now + time, note.duration, now);
+            } catch (error) {
+              console.warn('Error playing note:', error);
+              audioContextErrorCount++;
+              if (audioContextErrorCount >= MAX_AUDIO_CONTEXT_ERRORS) {
+                console.error('Too many AudioContext errors. Stopping playback.');
+                stopAllSounds();
+                return;
+              }
+            }
+          }
+          time += note.duration;
+        } else {
+          console.warn(`Skipping invalid note in pattern:`, note);
+        }
+      });
+    }
+    maxDuration = Math.max(maxDuration, time);
   });
-  return audioContext.createPeriodicWave(real, imag);
-};
 
-// Modified createNote function
-const createNote = (pitch, duration, instrumentName, effect = EFFECTS.NONE, effectParams = {}) => ({
-  pitch: Number.isFinite(pitch) ? pitch : 440,
-  duration,
-  instrumentName,
-  effect,
-  effectParams,
-});
+  return maxDuration;
+}
 
-// Function to transpose a pitch by a number of semitones
-const transposePitch = (pitch, semitones) =>
-  pitch * Math.pow(2, semitones / 12);
-
-// Modified createMelody function for smoother melodies
-const createMelody = (scale, rhythm, baseOctave = 4, instrumentName = 'LEAD', effect = null) => {
-  const baseFrequency = scale[0] * Math.pow(2, baseOctave - 4);
-  const instrument = INSTRUMENTS[instrumentName];
-  return rhythm.map(({ step, duration }) =>
-    createNote(
-      transposePitch(baseFrequency, step),
-      duration,
-      instrumentName,
-      effect || instrument.defaultEffect,
-      effect ? {} : instrument.defaultEffectParams
-    )
+// Updated playSoundtrack function with looping
+function playSoundtrack(loops = 1) {
+  const patterns = Object.values(SOUNDTRACK_CONFIG).map(
+    ({ notes, durations, instrument }) => definePattern(notes, durations, instrument)
   );
-};
+  return playPolyphonic(patterns, loops);
+}
 
-// Function to create a bassline based on a chord progression
-const createBassline = (scale, progression, duration) =>
-  progression.map((chordIndex) =>
-    createNote(
-      scale[chordIndex] / 2,
-      duration,
-      'BASS',
-      EFFECTS.NONE
-    )
+// New function to play a looping soundtrack
+function playLoopingSoundtrack(loops = -1) {
+  stopAllSounds();
+  const patterns = Object.values(SOUNDTRACK_CONFIG).map(
+    ({ notes, durations, instrument }) => definePattern(notes, durations, instrument)
   );
+  currentPatterns = patterns;
+  currentLoops = loops;
+  startTime = getAudioContext().currentTime;
+  isPlaying = true;
+  loop(patterns, loops);
+}
 
-// Function to create pad chords based on a chord progression
-const createPadChords = (scale, progression, duration) =>
-  progression.map((chordIndex) => [
-    createNote(scale[chordIndex], duration, 'PAD', EFFECTS.TREMOLO, { frequency: 2, depth: 0.3 }),
-    createNote(scale[(chordIndex + 2) % 7], duration, 'PAD', EFFECTS.TREMOLO, { frequency: 2, depth: 0.3 }),
-    createNote(scale[(chordIndex + 4) % 7], duration, 'PAD', EFFECTS.TREMOLO, { frequency: 2, depth: 0.3 }),
-  ]);
+// Updated stopAllSounds function to clear visualizations
+function stopAllSounds() {
+  isPlaying = false;
+  pausedTime = 0;
+  currentPatterns = null;
+  currentLoops = -1;
+  totalPausedTime = 0;
+  audioContextErrorCount = 0;
 
-// Function to create a drum pattern
-const createDrumPattern = (pattern, duration) =>
-  pattern.map(({ pitch, velocity }) =>
-    createNote(pitch, duration, 'DRUM', EFFECTS.NONE)
-  );
+  if (loopTimeoutId) {
+    clearTimeout(loopTimeoutId);
+    loopTimeoutId = null;
+  }
 
-// Function to combine multiple musical elements
-const combineParts = (...parts) =>
-  parts.reduce((acc, part) => [...acc, ...part], []);
+  // Stop all active sounds
+  const audioContext = getAudioContext();
+  if (audioContext) {
+    const now = audioContext.currentTime;
+    activeSounds.forEach(({ tone, stopTime }) => {
+      if (tone.stop && stopTime > now) {
+        try {
+          tone.stop();
+        } catch (error) {
+          console.warn('Error stopping tone:', error);
+        }
+      }
+    });
+    activeSounds = [];
 
-// Function to repeat a section
-const repeatSection = (section, times) =>
-  Array(times).fill().flatMap(() => section);
+    // Suspend the audio context
+    if (audioContext.state === 'running') {
+      audioContext.suspend().catch(error => console.warn('Failed to suspend AudioContext:', error));
+    }
+  }
 
-// Function to play a sequence of notes
-const playSequence = (sequence) => {
-  if (!audioContext) throw new Error('AudioContext not initialized');
-  
-  stop(); // Stop any currently playing sounds
-  
-  let startTime = audioContext.currentTime;
-  
-  const playNote = ({ instrumentName, pitch, duration, effect, effectParams }, noteStartTime) => {
-    if (!Number.isFinite(pitch)) {
-      console.warn(`Invalid pitch value: ${pitch}. Skipping this note.`);
+  // Clear all visualizations
+  visualizationElements.forEach(element => element.remove());
+  visualizationElements = [];
+}
+
+function loop(patterns, loops, currentLoop = 0) {
+  if (!isPlaying) return;
+
+  if (currentLoop < loops || loops === -1) {
+    if (!patterns || !Array.isArray(patterns) || patterns.length === 0) {
+      console.error('Invalid patterns in loop function');
+      stopAllSounds();
       return;
     }
 
-    const instrument = INSTRUMENTS[instrumentName];
-    if (!instrument) {
-      console.warn(`Invalid instrument: ${instrumentName}. Skipping this note.`);
-      return;
+    const duration = playPolyphonic(patterns);
+    loopTimeoutId = setTimeout(() => {
+      loop(patterns, loops, currentLoop + 1);
+    }, duration * 1000); // Convert duration to milliseconds
+  }
+}
+
+function calculatePatternDuration(pattern) {
+  return pattern.reduce((sum, note) => sum + (note ? note.duration : 0), 0);
+}
+
+// Updated pauseSoundtrack function
+function pauseSoundtrack() {
+  if (isPlaying) {
+    isPlaying = false;
+    pauseStartTime = getAudioContext().currentTime;
+    
+    if (loopTimeoutId) {
+      clearTimeout(loopTimeoutId);
+      loopTimeoutId = null;
     }
 
-    const { oscillator, filter } = createOscillator(instrument, pitch);
-    const gainNode = createGainNode();
+    // Pause all active sounds
+    const now = getAudioContext().currentTime;
+    activeSounds.forEach(({ tone, stopTime }) => {
+      if (tone.stop && stopTime > now) {
+        tone.stop();
+      }
+    });
     
-    filter.connect(gainNode);
-    const effectNode = applyEffect(gainNode, effect || instrument.defaultEffect, effectParams || instrument.defaultEffectParams);
-    effectNode.connect(audioContext.destination);
-    
-    // Apply ADSR envelope
-    const env = instrument.envelope;
-    const now = noteStartTime;
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(1, now + env.attack);
-    gainNode.gain.linearRampToValueAtTime(env.sustain, now + env.attack + env.decay);
-    gainNode.gain.setValueAtTime(env.sustain, now + duration - env.release);
-    gainNode.gain.linearRampToValueAtTime(0, now + duration);
-    
-    oscillator.start(noteStartTime);
-    oscillator.stop(noteStartTime + duration);
-    
-    currentOscillators.push(oscillator);
-    currentGainNodes.push(gainNode);
-  };
+    // Suspend the audio context
+    getAudioContext().suspend();
 
-  sequence.forEach((noteGroup, index) => {
-    if (Array.isArray(noteGroup)) {
-      // Play multiple notes simultaneously
-      noteGroup.forEach(note => playNote(note, startTime));
-      startTime += Math.max(...noteGroup.map(note => note.duration));
-    } else {
-      // Play a single note
-      playNote(noteGroup, startTime);
-      startTime += noteGroup.duration;
+    // Pause all visualizations (if the pause method exists)
+    visualizationElements.forEach(element => {
+      if (element && typeof element.pause === 'function') {
+        element.pause();
+      }
+    });
+  }
+}
+
+// Updated resumeSoundtrack function
+function resumeSoundtrack() {
+  if (!isPlaying && currentPatterns) {
+    isPlaying = true;
+    const now = getAudioContext().currentTime;
+    totalPausedTime += now - pauseStartTime;
+    
+    // Resume the audio context
+    getAudioContext().resume();
+    
+    // Resume all visualizations (if the resume method exists)
+    visualizationElements.forEach(element => {
+      if (element && typeof element.resume === 'function') {
+        element.resume();
+      }
+    });
+    
+    // Recalculate the current position in the loop
+    const totalDuration = calculatePatternDuration(currentPatterns[0]) * currentPatterns.length;
+    const adjustedTime = (now - startTime - totalPausedTime) % totalDuration;
+    
+    // Find the correct starting point in the patterns
+    let elapsedTime = 0;
+    let startPatternIndex = 0;
+    let startNoteIndex = 0;
+    
+    for (let i = 0; i < currentPatterns.length; i++) {
+      const patternDuration = calculatePatternDuration(currentPatterns[i]);
+      if (elapsedTime + patternDuration > adjustedTime) {
+        startPatternIndex = i;
+        for (let j = 0; j < currentPatterns[i].length; j++) {
+          if (elapsedTime + currentPatterns[i][j].duration > adjustedTime) {
+            startNoteIndex = j;
+            break;
+          }
+          elapsedTime += currentPatterns[i][j].duration;
+        }
+        break;
+      }
+      elapsedTime += patternDuration;
     }
-  });
-  
-  return startTime - audioContext.currentTime; // Return total duration
-};
+    
+    // Resume from the current position
+    const remainingPatterns = [
+      ...currentPatterns.slice(startPatternIndex).map(pattern => pattern.slice(startNoteIndex)),
+      ...currentPatterns.slice(0, startPatternIndex)
+    ];
+    
+    loop(remainingPatterns, currentLoops);
+  }
+}
 
-// Function to stop all playing sounds
-const stop = () => {
-  currentOscillators.forEach(osc => {
-    osc.stop();
-    osc.disconnect();
-  });
-  currentGainNodes.forEach(gain => gain.disconnect());
-  currentOscillators = [];
-  currentGainNodes = [];
-};
-
-// Helper function to combine tracks vertically (play simultaneously)
-const combineTracks = (...tracks) => {
-  const maxLength = Math.max(...tracks.map(track => track.length));
-  return Array(maxLength).fill().map((_, i) => 
-    tracks.map(track => track[i]).filter(Boolean).flat()
-  );
-};
-
-// New helper functions
-const randomElement = (array) => array[Math.floor(Math.random() * array.length)];
-
-const createArpeggio = (baseNote, intervals, duration) =>
-  intervals.map((interval, index) => 
-    createNote(
-      transposePitch(baseNote, interval),
-      duration,
-      INSTRUMENTS.LEAD,
-      EFFECTS.ARPEGGIO,
-      { speed: 16, pattern: [0, 1, 2, 1] }
-    )
-  );
-
-const createVariation = (melody, variationFn) =>
-  melody.map(variationFn);
-
-// Improved RPG song creation function
-const createRPGSong = () => {
-  const scale = SCALES.C_MAJOR; // Changed to C Major for a brighter sound
-  const progression = [0, 3, 4, 0]; // I-IV-V-I progression
-
-  const mainMelodyRhythm = [
-    { step: 0, duration: 1 }, { step: 2, duration: 1 },
-    { step: 4, duration: 1 }, { step: 2, duration: 1 },
-  ];
-
-  const secondaryMelodyRhythm = [
-    { step: 7, duration: 0.5 }, { step: 5, duration: 0.5 },
-    { step: 4, duration: 0.5 }, { step: 2, duration: 0.5 },
-    { step: 0, duration: 1 }, { step: 4, duration: 1 },
-  ];
-
-  const drumPattern = [
-    { pitch: 350, velocity: 0.8 }, { pitch: 250, velocity: 0.6 },
-    { pitch: 350, velocity: 0.7 }, { pitch: 250, velocity: 0.6 },
-  ];
-
-  const mainMelody = createMelody(scale, mainMelodyRhythm, 5, 'LEAD', EFFECTS.VIBRATO);
-  const secondaryMelody = createMelody(scale, secondaryMelodyRhythm, 4, 'PAD', EFFECTS.NONE);
-  const bassline = createBassline(scale, progression, 2);
-  const drums = repeatSection(createDrumPattern(drumPattern, 0.5), 2);
-  const pads = createPadChords(scale, progression, 4);
-
-  const verse = combineTracks(
-    mainMelody,
-    bassline,
-    drums
-  );
-
-  const chorus = combineTracks(
-    mainMelody,
-    secondaryMelody,
-    bassline,
-    drums,
-    pads
-  );
-
-  const bridge = combineTracks(
-    createMelody(scale, secondaryMelodyRhythm, 5, 'LEAD', EFFECTS.TREMOLO),
-    pads,
-    createBassline(scale, progression.reverse(), 2)
-  );
-
-  const outro = combineTracks(
-    createMelody(scale, mainMelodyRhythm, 6, 'LEAD', EFFECTS.NONE),
-    pads,
-    createBassline(scale, progression, 4)
-  );
-
-  return [
-    ...repeatSection(verse, 2),
-    ...chorus,
-    ...verse,
-    ...chorus,
-    ...bridge,
-    ...chorus,
-    ...outro,
-  ];
-};
-
-// New helper functions
-const keyChange = (melody, semitones) =>
-  melody.map(note => ({
-    ...note,
-    pitch: transposePitch(note.pitch, semitones)
-  }));
-
-const createDramaticBuild = (scale, duration) =>
-  scale.map((pitch, index) =>
-    createNote(pitch * 2, duration / (index + 1), 'PAD', EFFECTS.TREMOLO, { frequency: 4, depth: 0.5 })
-  );
-
-// Improved Eurovision-style song creation function
-const createEurovisionHit = () => {
-  const scale = SCALES.C_MAJOR;
-  const progression = [0, 5, 3, 4]; // I-VI-IV-V progression
-
-  const verseRhythm = [
-    { step: 0, duration: 0.5 }, { step: 2, duration: 0.5 },
-    { step: 4, duration: 0.5 }, { step: 2, duration: 0.5 },
-    { step: 0, duration: 1 }, { step: 4, duration: 1 },
-  ];
-
-  const chorusRhythm = [
-    { step: 0, duration: 0.5 }, { step: 2, duration: 0.5 },
-    { step: 4, duration: 0.5 }, { step: 7, duration: 0.5 },
-    { step: 9, duration: 1 }, { step: 7, duration: 1 },
-  ];
-
-  const drumPattern = [
-    { pitch: 350, velocity: 1 }, { pitch: 250, velocity: 0.6 },
-    { pitch: 350, velocity: 0.8 }, { pitch: 250, velocity: 0.6 },
-  ];
-
-  const verseMelody = createMelody(scale, verseRhythm, 4, 'LEAD', EFFECTS.NONE);
-  const chorusMelody = createMelody(scale, chorusRhythm, 5, 'LEAD', EFFECTS.VIBRATO);
-  const bassline = createBassline(scale, progression, 1);
-  const drums = repeatSection(createDrumPattern(drumPattern, 0.25), 4);
-  const pads = createPadChords(scale, progression, 2);
-
-  const dramaticBuild = createDramaticBuild(scale, 0.25);
-
-  const verse = combineTracks(
-    verseMelody,
-    bassline,
-    drums
-  );
-
-  const preChorus = combineTracks(
-    createMelody(scale, verseRhythm, 5, 'PAD', EFFECTS.TREMOLO),
-    bassline,
-    drums,
-    dramaticBuild
-  );
-
-  const chorus = combineTracks(
-    chorusMelody,
-    bassline,
-    drums,
-    pads
-  );
-
-  const bridge = combineTracks(
-    createMelody(scale, chorusRhythm, 3, 'BASS', EFFECTS.NONE),
-    pads,
-    createDrumPattern([{ pitch: 350, velocity: 0.5 }], 1)
-  );
-
-  const finalChorus = combineTracks(
-    keyChange(chorusMelody, 2), // Key change for dramatic effect
-    keyChange(bassline, 2),
-    drums,
-    keyChange(pads, 2)
-  );
-
-  return [
-    ...verse,
-    ...preChorus,
-    ...chorus,
-    ...verse,
-    ...preChorus,
-    ...chorus,
-    ...bridge,
-    ...dramaticBuild,
-    ...finalChorus,
-    ...finalChorus,
-  ];
-};
-
-// Modify the export to include the new Eurovision hit generator
-export const MusicGenerator = {
+export {
+  NOTES,
   WAVEFORMS,
-  EFFECTS,
-  INSTRUMENTS,
-  SCALES,
-  CHORD_PROGRESSIONS,
-  initAudioContext,
-  createNote,
-  playSequence,
-  createRPGSong,
-  createEurovisionHit,
-  stop
+  definePattern,
+  playPattern,
+  playPolyphonic,
+  playSoundtrack,
+  playLoopingSoundtrack,
+  stopAllSounds,
+  pauseSoundtrack,
+  resumeSoundtrack
 };
