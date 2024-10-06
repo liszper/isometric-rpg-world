@@ -1,11 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs", "yarn"]
+nixPkgs = ["bun"]
 
 [phases.install]
-cmds = ["yarn install --frozen-lockfile"]
+cmds = ["bun i"]
 
 [phases.build]
-cmds = ["yarn build"]
+cmds = ["bun run build"]
 
 [start]
-cmd = "yarn start"
+cmd = "bun run prod"
