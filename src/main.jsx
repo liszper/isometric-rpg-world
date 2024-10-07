@@ -12,9 +12,10 @@ import Stats from 'three/addons/libs/stats.module.js';
 import { World } from './world';
 import { createPlayer } from './player';
 import { createNPCs } from './npc';
-import { createGUI } from './gui';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Clouds } from './world/clouds';
+import { h, render } from 'preact';
+import GUI from './gui';
 
 const gameConfig = {
   renderer: {
@@ -91,10 +92,10 @@ class Game {
     this.createNPCs();
     this.createStats();
     this.createInputHandlers();
-    this.createGUI();
     this.setupEventListeners();
     this.startAnimationLoop();
     this.createClouds();
+    this.renderGUI();
   }
 
   createRenderer() {
@@ -339,6 +340,12 @@ class Game {
 
   createClouds() {
     this.clouds = new Clouds(this.scene, { width: gameConfig.world.width, height: gameConfig.world.height });
+  }
+
+  renderGUI() {
+    const guiContainer = document.createElement('div');
+    document.body.appendChild(guiContainer);
+    render(<GUI gameConfig={gameConfig} updateGame={this.updateGame.bind(this)} />, guiContainer);
   }
 }
 

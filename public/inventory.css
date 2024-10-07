@@ -1,0 +1,124 @@
+.inventory-container {
+    position: fixed;
+    right: -320px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 320px;
+    height: 80vh;
+    background-image: url('textures/stone.jpg');
+    background-size: 400px;
+    overflow-y: auto;
+    border-left: 2px solid #3a3a3a;
+    transition: right 0.3s ease-in-out;
+  }
+  
+  .inventory-container.open {
+    right: 0;
+  }
+  
+  .inventory-trigger {
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 60px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border: 1px solid #3a3a3a;
+    border-right: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1006;
+  }
+  
+  .inventory-toggle {
+    display: none;
+  }
+  
+  .inventory-content {
+    padding: 10px;
+  }
+  
+  .equipment-section {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-rows: repeat(4, 1fr);
+    gap: 5px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    border: 2px solid #3a3a3a;
+    margin-bottom: 20px;
+    aspect-ratio: 3 / 4;
+  }
+  
+  .equipment-slot {
+    background-color: rgba(0, 0, 0, 0.7);
+    border: 1px solid #3a3a3a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .equipment-slot.weapon { grid-area: 1 / 1 / 3 / 2; }
+  .equipment-slot.helmet { grid-area: 1 / 2 / 2 / 3; }
+  .equipment-slot.shield { grid-area: 1 / 3 / 3 / 4; }
+  .equipment-slot.armor { grid-area: 2 / 2 / 4 / 3; }
+  .equipment-slot.gloves { grid-area: 3 / 1 / 4 / 2; }
+  .equipment-slot.belt { grid-area: 4 / 2 / 5 / 3; }
+  .equipment-slot.boots { grid-area: 3 / 3 / 4 / 4; }
+  .equipment-slot.amulet { grid-area: 4 / 1 / 5 / 2; }
+  .equipment-slot.ring1 { grid-area: 4 / 3 / 5 / 4; }
+  .equipment-slot.ring2 { grid-area: 4 / 4 / 5 / 5; }
+  
+  .inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 1px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 5px;
+    border: 2px solid #3a3a3a;
+    margin-bottom: 10px;
+  }
+  
+  .inventory-slot {
+    aspect-ratio: 1;
+    background-color: rgba(0, 0, 0, 0.7);
+    border: 1px solid #3a3a3a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .inventory-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 5px;
+    border: 2px solid #3a3a3a;
+  }
+  
+  .control-button {
+    width: 30px;
+    height: 30px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border: 1px solid #3a3a3a;
+  }
+  
+  .gold-display {
+    flex-grow: 1;
+    height: 30px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border: 1px solid #3a3a3a;
+    margin: 0 5px;
+    display: flex;
+    align-items: center;
+    padding: 0 5px;
+    color: #ffd700;
+    font-weight: bold;
+  }

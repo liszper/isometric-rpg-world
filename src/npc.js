@@ -1,25 +1,36 @@
+import * as THREE from 'three';
 import { Vector3 } from 'three';
-import { createCharacter } from './character';
-import { createCharacterModel } from './character/characterModel';
+import { createCharacter } from './character'; // No longer importing createCharacterModel
 
 const createNPC = (initialPosition, world) => {
-  // Generate random color
-  const randomColor = Math.random() * 0xFFFFFF;
-  
+  // Generate random colors
+  const randomBodyColor = Math.floor(Math.random() * 0xFFFFFF);
+  const randomEyeColor = Math.floor(Math.random() * 0xFFFFFF);
+  const randomNoseColor = Math.floor(Math.random() * 0xFFFFFF);
   // Generate random size (0.8 to 1.2 times the original size)
   const sizeMultiplier = 0.8 + Math.random() * 0.4;
 
-  const { geometry, material } = createCharacterModel(randomColor, sizeMultiplier);
+  // Generate a random geometry type
+  const geometryTypes = ['capsule', 'box', 'sphere'];
+  const randomGeometryType = geometryTypes[Math.floor(Math.random() * geometryTypes.length)];
 
-  const npcOptions = {
-    geometry,
-    material,
+  // Prepare options for character creation
+  const characterOptions = {
     moveSpeed: 2,
-    usePathfinding: true
+    usePathfinding: true,
+    // Pass the model options
+    bodyColor: randomBodyColor,
+    eyeColor: randomEyeColor,
+    noseColor: randomNoseColor,
+    sizeMultiplier: sizeMultiplier,
+    geometryType: randomGeometryType,
+    // Add other randomizable features here
   };
 
-  const npc = createCharacter(initialPosition, world, npcOptions);
+  // Create the character (NPC)
+  const npc = createCharacter(initialPosition, world, characterOptions);
 
+  // Movement and update logic
   const chooseNewDestination = () => {
     const x = Math.floor(Math.random() * world.width);
     const z = Math.floor(Math.random() * world.height);
@@ -45,7 +56,7 @@ const createNPC = (initialPosition, world) => {
     mesh: npc.mesh,
     update,
     isMoving: npc.isMoving,
-    setTargetPosition: npc.setTargetPosition
+    setTargetPosition: npc.setTargetPosition,
   };
 };
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { Vector2, Vector3, Quaternion } from 'three';
+import { Vector2, Vector3 } from 'three';
 import { search } from './pathfinding';
-import { createCharacterModel } from './character/characterModel';
+import { createCharacterModel } from './character/characterModel pengu';
 
 const getTerrainHeight = (heightMap, x, z) => {
   const gridX = Math.floor(x);
@@ -32,12 +32,28 @@ const smoothedTerrainHeight = (heightMap, x, z) => {
 const createCharacter = (initialPosition, world, options = {}) => {
   const {
     moveSpeed = 2,
-    // Removed rotationSpeed
     getTargetPosition = null,
     usePathfinding = false,
-    ...modelOptions
+    // Extract model options
+    bodyColor,
+    eyeColor,
+    noseColor,
+    sizeMultiplier,
+    geometryType,
+    // Add other model options here
   } = options;
 
+  // Prepare model options
+  const modelOptions = {
+    bodyColor,
+    eyeColor,
+    noseColor,
+    sizeMultiplier,
+    geometryType,
+    // Add other model options here
+  };
+
+  // Create the character model with the provided options
   const characterModel = createCharacterModel(modelOptions);
 
   // Adjust initial position to be on top of the terrain
@@ -47,15 +63,13 @@ const createCharacter = (initialPosition, world, options = {}) => {
   let state = {
     currentPosition: new Vector3().copy(characterModel.position),
     targetPosition: new Vector3().copy(characterModel.position),
-    // Removed direction and targetDirection
     finalTargetPosition: null,
     isMoving: false,
     moveSpeed,
-    // Removed rotationSpeed
     world,
     path: [],
     pathIndex: 0,
-    currentDirection: new Vector3(0, 0, 1) // Add this line to track current direction
+    currentDirection: new Vector3(0, 0, 1)
   };
 
   const setTargetPosition = (currentState, newTargetPosition) => {
@@ -82,10 +96,8 @@ const createCharacter = (initialPosition, world, options = {}) => {
       );
     } else {
       if (newState.isMoving) {
-        console.log("Invalid target selected. Continuing to previous destination.");
         // Keep the current path and target
       } else {
-        console.log("No valid path found.");
         newState.isMoving = false;
         newState.path = [];
         newState.targetPosition = new Vector3(newState.currentPosition.x, newState.currentPosition.y, newState.currentPosition.z);
@@ -151,7 +163,6 @@ const createCharacter = (initialPosition, world, options = {}) => {
       state = update(deltaTime, state);
     },
     getPosition: () => characterModel.position.clone(),
-    // Removed getDirection
     setTargetPosition: (newTargetPosition) => {
       state = setTargetPosition(state, newTargetPosition);
     },
